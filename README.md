@@ -9,7 +9,7 @@ Thought I'd share it in case someone found it useful.
 Reads PNG, BMP, ICO, TGA, XPM, XBM and DXTC textures.
 Reads JPG via TonyJpegDecoder.py which was not written by me. See the file for its license.
 
-Writes in PNG, BMP, TGA, XPM and XBM.
+Writes in PNG, BMP, TGA, XPM and XBM. (Note that the color selection algorithm for writing indexed images is lousy, so avoid it)
 
 Does some simple image manipulation.
 

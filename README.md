@@ -18,3 +18,5 @@ your guess is as good as mine.
 
 Also included is xbe.py which reads old XBox .xbe executable data, and with limpp can extract program and save icons.
 
+I was learning python as I wrote this, so please excuse anything stupid :)
+

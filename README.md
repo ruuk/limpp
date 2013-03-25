@@ -1,4 +1,5 @@
 L.I.M.P.P.
+
 Library of Image Manipulation in Pure Python
 
 Wrote this forever ago because I needed a pure python method to handle various icon formats in a script for XBMC on XBox, and as a python learning exercise.

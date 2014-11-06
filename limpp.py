@@ -17,6 +17,8 @@ from struct import unpack, pack, calcsize
 import array
 import zlib
 from os.path import getsize as ospath_getsize, splitext as ospath_splitext
+
+imageop = None
 try:
     import imageop
 except ImportError:
@@ -29,11 +31,28 @@ TODO:
     Replace file vars with non reserved name
 '''
 
+class PseudoFile:
+    def __init__(self,fileobj_or_path):
+        self.obj = None
+        self.path = None
+        if isinstance(fileobj_or_path, basestring):
+            self.path = fileobj_or_path
+        else:
+            self.obj = fileobj_or_path
+
+    def __getattr__(self,name):
+        return getattr(self.obj, name)
+
+    def open(self,mode='r'):
+        if self.path:
+            self.obj = open(self.path,mode)
+        return self
+
+    def close(self):
+        if self.path: self.obj.close()
+
 def openfile(fileobj_or_path,mode='r'):
-    if isinstance(fileobj_or_path, basestring):
-        return open(fileobj_or_path,mode)
-    else:
-        return fileobj_or_path
+    return PseudoFile(fileobj_or_path).open(mode)
 
 ################################################################################
 ''' Class: Image_Error '''
@@ -341,6 +360,24 @@ class Manipulator:
             multiple-=1
 
     def Scale(self,width,height):
+        if not imageop: #imageop is deprecated
+            ct = 0
+            cw = self.width
+            ch = self.height
+            while width < cw or height < ch:
+                cw/=2
+                ch/=2
+                ct+=1
+            if ct: return self.Half(ct)
+            while width > cw and height > ch:
+                cw/=2
+                ch/=2
+                ct+=1
+            if ct:
+                ct-=1
+                if ct: return self.Double(ct)
+            return
+
         self.RGBA.data = array.array('L',imageop.scale(self.RGBA.data.tostring(),self.Bpp,self.width,self.height,width,height))
         self.RGBA.mode = 'PIXEL'
         self.RGBA.Update_dimensions(width,height)
@@ -2152,6 +2189,7 @@ class BMP_image(Indexed_image,BGR_image,RLE_image):
 ################################################################################    
 class JPEG_image(Base_image):
     def __init__(self,addr=0,size=None,file=None,process=True):
+        self.init()
         import TonyJpegDecoder
         if not size:
             size = ospath_getsize(file)
@@ -2954,7 +2992,7 @@ class BGR_to_BMP(SaveImage_base):
         self.dataOffset = 54 + len(palette)
         self.clrUsed=len(palette)/4
         self.clrImportant=len(palette)/4
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.Create_header())
         f.write(palette)
         f.write(self.data)
@@ -2974,14 +3012,14 @@ class BGR_to_BMP(SaveImage_base):
             x+=3
         self.data = out.tostring()
         self.bitcount = 16
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.Create_header())
         f.write(self.data)
         f.close()
 
     def Write_24bit(self):
         self.bitcount = 24
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.Create_header())
         f.write(self.data)
         f.close()
@@ -3001,7 +3039,7 @@ class BGR_to_BMP(SaveImage_base):
             x+=3
         self.data = out.tostring()
         self.bitcount = 32
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.Create_header())
         f.write(self.data)
         f.close()
@@ -3117,7 +3155,7 @@ class RGBA_to_PNG(SaveImage_base):
         header_chunk = self.Create_chunk('IHDR',header)
         data_chunk = self.Create_chunk('IDAT',zlib.compress(filtered,compression))
         end_chunk = self.Create_chunk('IEND','')
-        f=open(file,'wb')
+        f=openfile(file,'wb')
         f.write(signature)
         f.write(header_chunk)
         if palette: f.write(self.Create_chunk('PLTE',palette))
@@ -3399,7 +3437,7 @@ class RGBA_to_TGA(SaveImage_base):
 
         if rle: out = self.RLE(array.array('B',out),bpp=1).tostring()
         
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.header)
         f.write(palette)
         f.write(out)
@@ -3437,7 +3475,7 @@ class RGBA_to_TGA(SaveImage_base):
             
         if rle: out = self.RLE(out)
 
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.header)
         f.write(out.tostring())
         f.write(self.footer)
@@ -3453,7 +3491,7 @@ class RGBA_to_TGA(SaveImage_base):
         else:
             out = self.RGBA_to_BGR_string()
         if self.flip: Manipulator(image=self.RGBA).Flip() #FIX BGR conversion code to handle flipping ------------------------------------------------------FIX    
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.header)
         f.write(out)
         f.write(self.footer)
@@ -3490,7 +3528,7 @@ class RGBA_to_TGA(SaveImage_base):
 
         if rle: out = self.RLE(array.array('B',out.tostring()),bpp=2)
         
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.header)
         f.write(out.tostring())
         f.write(self.footer)
@@ -3520,7 +3558,7 @@ class RGBA_to_TGA(SaveImage_base):
                 
         if rle: out = self.RLE(out,bpp=Bpp)
         
-        f = open(self.file,'wb')
+        f = openfile(self.file,'wb')
         f.write(self.header)
         f.write(out.tostring())
         f.write(self.footer)
@@ -3627,7 +3665,7 @@ class RGBA_to_XPM(SaveImage_base):
         done = []
         list = []
         space = ' ' * color_width
-        f = open(self.file,'w')
+        f = openfile(self.file,'w')
         f.write('/* XPM */\nstatic char * Image_xpm[] = {\n')
         f.write('"'+ str(self.width) +' '+ str(self.height) +' '+ str(num+1) +' '+ str(color_width) +'",\n')
         f.write('"' + (' ' * color_width) + '\tc None",\n')
@@ -3722,7 +3760,7 @@ class RGBA_to_XBM(SaveImage_base):
                     x+=4
                 out += imageop.dither2mono(row,self.width,1)
                 y+=1
-        f = open(self.file,'w')
+        f = openfile(self.file,'w')
         f.write('#define iu_width ' + str(self.width) + '\n' + '#define iu_height ' + str(self.height) + '\n' + 'static char iu_bits[] = {\n')
 
         out = array.array('B',out)
@@ -3772,7 +3810,7 @@ def Get_image(mipmap=0,addr=0,size=None,file=None,process=True,options=None):
     f.seek(addr)
     type = unpack('4s',f.read(4))[0]
     f.seek(0)
-    if isinstance(file, basestring): f.close()
+    f.close()
     try:
         if type == 'XPR0':
             return XPR0_image(mipmap=mipmap,addr=addr,size=size,file=file,process=process)

@@ -1,32 +1,31 @@
-#!/usr/bin/env python
-
 """
 Based on C++ code by Dr. Tony Lin:
-/******************************************************************************
-*    Author:            Dr. Tony Lin                                            *
-*    Email:            lintong@cis.pku.edu.cn                                    *
-*    Release Date:    Dec. 2002                                                *
-*                                                                            *
-*    Name:            TonyJpegLib, rewritten from IJG codes                    *
-*    Source:            IJG v.6a JPEG LIB                                        *
-*    Purpose:        Support real jpeg file, with readable code                *
-*                                                                            *
-*    Acknowlegement:    Thanks for great IJG, and Chris Losinger                *
-*                                                                            *
-*    Legal Issues:    (almost same as IJG with followings)                    *
-*                                                                            *
-*    1. We don't promise that this software works.                            *
-*    2. You can use this software for whatever you want.                        *
-*    You don't have to pay.                                                    *
-*    3. You may not pretend that you wrote this software. If you use it        *
-*    in a program, you must acknowledge somewhere. That is, please            *
-*    metion IJG, and Me, Dr. Tony Lin.                                        *
-*                                                                            *
-*****************************************************************************/
+
+*****************************************************************************
+*    Author:            Dr. Tony Lin                                        *
+*    Email:            lintong@cis.pku.edu.cn                               *
+*    Release Date:    Dec. 2002                                             *
+*                                                                           *
+*    Name:            TonyJpegLib, rewritten from IJG codes                 *
+*    Source:            IJG v.6a JPEG LIB                                   *
+*    Purpose:        Support real jpeg file, with readable code             *
+*                                                                           *
+*    Acknowlegement:    Thanks for great IJG, and Chris Losinger            *
+*                                                                           *
+*    Legal Issues:    (almost same as IJG with followings)                  *
+*                                                                           *
+*    1. We don't promise that this software works.                          *
+*    2. You can use this software for whatever you want.                    *
+*    You don't have to pay.                                                 *
+*    3. You may not pretend that you wrote this software. If you use it     *
+*    in a program, you must acknowledge somewhere. That is, please          *
+*    metion IJG, and Me, Dr. Tony Lin.                                      *
+*                                                                           *
+*****************************************************************************
 """
 
+import sys
 
-# JPEG marker codes
 M_SOF0  = 0xc0
 M_SOF1  = 0xc1
 M_SOF2  = 0xc2
@@ -92,18 +91,6 @@ M_TEM   = 0x01
 
 M_ERROR = 0x100
 
-# jpeg_natural_order[i] is the natural-order position of the i'th 
-# element of zigzag order.
-
-# When reading corrupted data, the Huffman decoders could attempt
-# to reference an entry beyond the end of this array (if the decoded
-# zero run length reaches past the end of the block).  To prevent
-# wild stores without adding an inner-loop test, we put some extra
-# "63"s after the real entries.  This will cause the extra coefficient
-# to be stored in location 63 of the block, not somewhere random.
-# The worst case would be a run-length of 15, which means we need 16
-# fake entries.
-
 jpeg_natural_order = [
             0,  1,  8, 16,  9,  2,  3, 10,
             17, 24, 32, 25, 18, 11,  4,  5,
@@ -116,13 +103,13 @@ jpeg_natural_order = [
             63, 63, 63, 63, 63, 63, 63, 63, # extra entries for safety
             63, 63, 63, 63, 63, 63, 63, 63]
 
-
 class jpeg_component_info:
-  component_id = 0        # identifier for this component (0..255)
-  component_index = 0        # its index in SOF or cinfo->comp_info[]
-  h_samp_factor = 0        # horizontal sampling factor (1..4)
-  v_samp_factor = 0        # vertical sampling factor (1..4)
-  quant_tbl_no = 0        # quantization table selector (0..3)
+  pass
+  #component_id = 0        # identifier for this component (0..255)
+  #component_index = 0        # its index in SOF or cinfo->comp_info[]
+  #h_samp_factor = 0        # horizontal sampling factor (1..4)
+  #v_samp_factor = 0        # vertical sampling factor (1..4)
+  #quant_tbl_no = 0        # quantization table selector (0..3)
 
 class HUFFTABLE:
   def __init__(self):
@@ -196,6 +183,11 @@ class HUFFTABLE:
             ctr -= 1
         p += 1
 
+def ScaleQuantTable(tblStd, tblAan):
+  half = 1 << 11
+  # scaling needed for AA&N algorithm
+  return [(tblStd[i] * tblAan[i] + half) >> 12 for i in range(64)]
+
 class TonyJpegDecoder:
   def __init__(self):
     """set up the decoder"""
@@ -208,8 +200,8 @@ class TonyJpegDecoder:
     self.CbToB = {}
     self.CbToG = {}
     # To speed up, we precompute two DCT quant tables
-    self.qtblY = {}
-    self.qtblCbCr = {}
+    self.qtblY_dict = {}
+    self.qtblCbCr_dict = {}
     self.htblYDC = HUFFTABLE()
     self.htblYAC = HUFFTABLE()
     self.htblCbCrDC = HUFFTABLE()
@@ -274,9 +266,9 @@ class TonyJpegDecoder:
       prec = n >> 4
       n &= 0x0F
       if n == 0:
-        qtb = self.qtblY
+        qtb = self.qtblY_dict
       else:
-        qtb = self.qtblCbCr
+        qtb = self.qtblCbCr_dict
       for i in range(64):
         qtb[jpeg_natural_order[i]] = self.ReadByte()
       length -= 64
@@ -514,19 +506,19 @@ class TonyJpegDecoder:
     # i is the actual input pixel value, in the range 0..MAXJSAMPLE
     nScale = 1 << 16 # equal to pow(2,16)
     nHalf = nScale >> 1
-    FIX = lambda x: int((x) * nScale + 0.5)
+    FIX = lambda x, n: int((x) * n + 0.5)
     for i in range(256):
       # The Cb or Cr value we are thinking of is x = i - CENTERJSAMPLE
       # We also add in ONE_HALF so that need not do it in inner loop
       x = i - 128
       # Cr=>R value is nearest int to 1.40200 * x
-      self.CrToR[i] = (int) ( FIX(1.40200) * x + nHalf ) >> 16
+      self.CrToR[i] = (int) ( FIX(1.40200, nScale) * x + nHalf ) >> 16
       # Cb=>B value is nearest int to 1.77200 * x
-      self.CbToB[i] = (int) ( FIX(1.77200) * x + nHalf ) >> 16
+      self.CbToB[i] = (int) ( FIX(1.77200, nScale) * x + nHalf ) >> 16
       # Cr=>G value is scaled-up -0.71414 * x
-      self.CrToG[i] = (int) (- FIX(0.71414) * x)
+      self.CrToG[i] = (int) (- FIX(0.71414, nScale) * x)
       # Cb=>G value is scaled-up -0.34414 * x
-      self.CbToG[i] = (int) (- FIX(0.34414) * x + nHalf)
+      self.CbToG[i] = (int) (- FIX(0.34414, nScale) * x + nHalf)
 
   def InitQuantTable(self):
     """InitQuantTable will produce customized quantization table into: self.tblYQuant[0..63] and self.tblCbCrQuant[0..63]"""
@@ -568,14 +560,10 @@ class TonyJpegDecoder:
       12873, 17855, 16819, 15137, 12873, 10114,  6967,  3552,
        8867, 12299, 11585, 10426,  8867,  6967,  4799,  2446,
        4520,  6270,  5906,  5315,  4520,  3552,  2446,  1247]
-    def ScaleQuantTable(tblStd, tblAan):
-      half = 1 << 11
-      # scaling needed for AA&N algorithm
-      return [(tblStd[i] * tblAan[i] + half) >> 12 for i in range(64)]
 
     # Scale the Y and CbCr quant table, respectively
-    self.qtblY = ScaleQuantTable(self.qtblY, aanscales)
-    self.qtblCbCr = ScaleQuantTable(self.qtblCbCr, aanscales)
+    self.qtblY = ScaleQuantTable(self.qtblY_dict, aanscales)
+    self.qtblCbCr = ScaleQuantTable(self.qtblCbCr_dict, aanscales)
     # If no qtb got from jpg file header, then use std quant tbl
     # self.qtblY = ScaleQuantTable(std_luminance_quant_tbl, aanscales)
     # self.qtblCbCr = ScaleQuantTable(std_chrominance_quant_tbl, aanscales)
@@ -809,7 +797,11 @@ class TonyJpegDecoder:
       # DC coefficient (with scale factor as needed).
       # With typical images and quantization tables, half or more of the
       # column DCT calculations can be simplified this way.
-      if reduce(int.__or__, [coeff[inptr+DCTSIZE*n] for n in range(1,8)]) == 0:
+      basis = 0
+      for n in range(1,8):
+          basis |= coeff[inptr+DCTSIZE*n]
+      if basis == 0:
+#      if reduce(int.__or__, [int(coeff[inptr+DCTSIZE*n]) for n in range(1,8)]) == 0:
         """ AC terms all zero """
         dcval = coeff[inptr + DCTSIZE*0] * quant[quantptr+DCTSIZE*0]
             
@@ -901,7 +893,11 @@ class TonyJpegDecoder:
         # On machines with very fast multiplication, it's possible that the
         # test takes more time than it's worth.  In that case this section
         # may be commented out.
-        if reduce(int.__or__, workspace[wsptr+1:wsptr+8]) == 0:
+        basis = 0
+        for uuhu in workspace[wsptr+1:wsptr+8]:
+            basis |= uuhu
+        if basis == 0:
+#        if reduce(int.__or__, [int(uuhu) for uuhu in workspace[wsptr+1:wsptr+8]]) == 0:
           # AC terms all zero
           dcval = range_limit[ (workspace[wsptr] >> 5) & RANGE_MASK]
           outbuf[outptr+0] = dcval
@@ -995,8 +991,21 @@ class TonyJpegDecoder:
         s = self.ValueFromCategory(s, r)    # get dc difference value
     
     # Convert DC difference to actual value, update last_dc_val
-    s += getattr(self, LastDC)
-    setattr(self, LastDC, s)
+    if LastDC == 'dcY':
+        s += self.dcY
+        self.dcY = s
+        #s += getattr(self, LastDC)
+        #setattr(self, LastDC, s)
+    elif LastDC == 'dcCb':
+        s += self.dcCb
+        self.dcCb = s
+        #s += getattr(self, LastDC)
+        #setattr(self, LastDC, s)
+    elif LastDC == 'dcCr':
+        s += self.dcCr
+        self.dcCr = s
+        #s += getattr(self, LastDC)
+        #setattr(self, LastDC, s)
 
     # Output the DC coefficient (assumes jpeg_natural_order[0] = 0)
     coeff[0] = s
@@ -1153,3 +1162,74 @@ class TonyJpegDecoder:
     else:
       return nOffset
 
+def dw2c(word):
+  return chr(word & 0xff) + chr((word >> 8) & 0xff) + chr((word >> 16) & 0xff) + chr((word >> 24) & 0xff)
+
+def w2c(word):
+  return chr(word & 0xff) + chr((word >> 8) & 0xff)
+
+class BMPFile:
+  def __init__(self, width, height, rgbstr):
+    self.data = rgbstr
+    self.width = width
+    self.height = height
+
+  def __str__(self):
+    return self.getheader() + self.getinfoheader() + self.getcolortable() + self.data
+
+  def getheader(self):
+    return "BM" + dw2c(self.filesize()) + dw2c(0) + dw2c(self.dataoffset())
+
+  def filesize(self):
+    return self.dataoffset() + self.imagesize()
+
+  def dataoffset(self):
+    headerlen = 14
+    infoheaderlen = 40
+    colortablelen = 0
+    return headerlen + infoheaderlen + colortablelen
+
+  def imagesize(self):
+    """compressed size of image"""
+    return len(self.data)
+
+  def getinfoheader(self):
+    planes = 1
+    bitcount = 24
+    compression = 0
+    xpixelsperm = 1
+    ypixelsperm = 1
+    colorsused = 0
+    colorsimportant = 0 # all
+    return dw2c(40) + dw2c(self.width) + dw2c(self.height) + w2c(planes) + w2c(bitcount) + dw2c(compression) + dw2c(self.imagesize()) + dw2c(xpixelsperm) + dw2c(ypixelsperm) + dw2c(colorsused) + dw2c(colorsimportant)
+
+  def getcolortable(self):
+    # blank for 24bit color
+    return ""
+
+def bgr2rgb(bmpstr):
+  return "".join([bmpstr[i*3+2]+bmpstr[i*3+1]+bmpstr[i*3] for i in range(len(bmpstr)/3)])
+
+def padrgb(bmpstr):
+  return "".join([bmpstr[i*3:i*3+3] + chr(0) for i in range(len(bmpstr)/3)])
+
+def avg(chrs):
+  if chrs:
+    return chr(int(sum([ord(c) for c in chrs])/len(chrs)))
+  else:
+    return ""
+
+def main():
+    inputfile = open(sys.argv[1], 'rb')
+    jpgsrc = inputfile.read()
+    inputfile.close()
+    decoder = TonyJpegDecoder()
+    bmpout = decoder.DecompressImage(jpgsrc)
+    bmpstr = "".join([chr(x) for x in bmpout])
+    bmpstr2 = bgr2rgb(bmpstr)
+    bmp = BMPFile(decoder.Width, decoder.Height, bmpstr)
+    bmpfile = sys.argv[2]
+    open(bmpfile, "wb").write(str(bmp))
+
+if __name__ == '__main__':
+    main()

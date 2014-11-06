@@ -13,7 +13,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-from struct import unpack, pack, calcsize, GetShiftFromMask
+from struct import unpack, pack, calcsize
 import array
 import zlib
 from os.path import getsize as ospath_getsize, splitext as ospath_splitext
@@ -26,7 +26,15 @@ except ImportError:
 TODO:
     Process the tRNS chunk
     Improve (make correct?) the adaptive filtering
+    Replace file vars with non reserved name
 '''
+
+def openfile(fileobj_or_path,mode='r'):
+    if isinstance(fileobj_or_path, basestring):
+        return open(fileobj_or_path,mode)
+    else:
+        return fileobj_or_path
+
 ################################################################################
 ''' Class: Image_Error '''
 ################################################################################
@@ -1934,7 +1942,17 @@ class ICO_image(Indexed_image,BGR_image,RLE_image):
         #print self.icon_heads[choice]['SizeImage']        
         self.mask_offset = self.data_offset + self.data_size
         self.mask_size = self.icon_heads[choice]['BytesInRes'] + self.icon_heads[choice]['ImageOffset'] - self.mask_offset
-        
+
+def GetShiftFromMask(mask): #TODO: Test if this works
+	if not mask: return 0
+
+	shift = 0;
+	while mask & 1 == 0:
+		mask >>= 1
+		shift+=1
+  
+	return shift
+
 ################################################################################
 ''' Class: BMP_image ''' 
 ################################################################################    
@@ -2144,7 +2162,7 @@ class JPEG_image(Base_image):
         self.type = 'JPG'
         self.header = {}
         self.decoder = TonyJpegDecoder.TonyJpegDecoder()
-        self.data = self.decoder.DecompressImage(open(file,'rb').read())
+        self.data = self.decoder.DecompressImage(openfile(file,'rb').read())
         self.width = self.decoder.Width
         self.height = self.decoder.Height
         self.size_of_plane = self.width * self.height
@@ -2399,7 +2417,7 @@ class PNG_image(Indexed_image,Greyscale_image):
         return data
 
     def Read_interlaced_image_data(self):
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         data = ''
         s = self.data_offsets.keys()
         s.sort()
@@ -2549,7 +2567,7 @@ class PNG_image(Indexed_image,Greyscale_image):
 
     def Read_header(self):
         format = '>8sL4s2L5BL'
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         f.seek(self.addr)
 
         self.header = {}
@@ -2585,7 +2603,7 @@ class PNG_image(Indexed_image,Greyscale_image):
         if self.interlaced:
             self.Read_interlaced_image_data()
             return
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         data = ''
         s = self.data_offsets.keys()
         s.sort()
@@ -2624,7 +2642,7 @@ class XPM_image(Base_image):
         from namedrgb import NAMEDCOLOR
         self.named_color = NAMEDCOLOR
         import binascii
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         for x in range(1,self.header['StartLine']):
             f.readline()
             
@@ -2680,7 +2698,7 @@ class XPM_image(Base_image):
             return self.named_color[name.upper().replace(' ','')] + 'FF'
     
     def Read_header(self):
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         f.seek(self.addr)
         x=0
         while 1:
@@ -2730,7 +2748,7 @@ class XBM_image(Base_image,Indexed_image):
     def Process(self):
         self.RGBA = RGBA_data(self.width,self.height,fill=chr(255),mode='PIXEL')
         import binascii
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         for x in range(1,self.header['StartLine']):
             f.readline()
         
@@ -2762,7 +2780,7 @@ class XBM_image(Base_image,Indexed_image):
             y+=1
         
     def Read_header(self):
-        f = open(self.file,'rb')
+        f = openfile(self.file,'rb')
         f.seek(self.addr)
         self.header = {}
         x=0
@@ -3249,7 +3267,7 @@ class RGBA_to_PNG(SaveImage_base):
     
     def Create_chunk(self,type,data):
         format = '>L4s' + str(len(data)) + 'sL'
-        return pack(format,len(data),type,data,self.CRC(type + data))
+        return pack(format,len(data),type,data,self.CRC(type + data) & 0xffffffff)
     
     def CRC(self,buf):
         return zlib.crc32(buf)
@@ -3750,10 +3768,11 @@ def Hex8(val):
 ################################################################################    
 def Get_image(mipmap=0,addr=0,size=None,file=None,process=True,options=None):
     if not file: return None
-    f = open(file,'rb')
+    f = openfile(file,'rb')
     f.seek(addr)
     type = unpack('4s',f.read(4))[0]
-    f.close()
+    f.seek(0)
+    if isinstance(file, basestring): f.close()
     try:
         if type == 'XPR0':
             return XPR0_image(mipmap=mipmap,addr=addr,size=size,file=file,process=process)

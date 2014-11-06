@@ -13,8 +13,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-from struct import *
-import array , sys
+from struct import unpack, pack, calcsize, GetShiftFromMask
+import array
 import zlib
 from os.path import getsize as ospath_getsize, splitext as ospath_splitext
 try:
@@ -592,8 +592,8 @@ class Indexed_image(Base_image,Base_indexed_image):
         if read: self.Read_image_data('B')
         back = self.palette[0:1].tostring()
         self.RGBA = RGBA_data(self.width,self.height,fill=back,mode='PIXEL')
-        padsize = 0
-        if self.pad: padsize = (4 - (self.Bps % 4)) % 4
+        #padsize = 0
+        #if self.pad: padsize = (4 - (self.Bps % 4)) % 4
         pos=0
         j=0
         if self.flipped:
@@ -723,7 +723,7 @@ class RLE_image(Base_image,Base_indexed_image):
         pos = 0
         x = 0
         l = self.RGBA.Data_length()
-        dl = len(self.unprocessed)
+        #dl = len(self.unprocessed)
         while x < l:
             head = self.unprocessed[pos]
             pos+=1
@@ -754,7 +754,7 @@ class RLE_image(Base_image,Base_indexed_image):
         pos = 0
         x = 0
         l = self.RGBA.Data_length()
-        dl = len(self.unprocessed)
+        #dl = len(self.unprocessed)
         Bpp = self.sourceBpp
         a = 255
         while x < l:
@@ -1026,7 +1026,7 @@ class Greyscale_image:
         pos = 0
         x = 0
         l = self.RGBA.Data_length()
-        dl = len(self.unprocessed)
+        #dl = len(self.unprocessed)
         while x < l:
             head = self.unprocessed[pos]
             pos+=1
@@ -2836,7 +2836,6 @@ class SaveImage_base:
         pixels = {}
         l = len(self.RGBA.data)
         x=0
-        diff = 0.0
         div=1
         if l > 2047:
             div = int(l/1024)
@@ -3225,12 +3224,12 @@ class RGBA_to_PNG(SaveImage_base):
         return len(test.keys()) * val
     
     def Filter_adaptive(self,row_data,pos):
-        row_l = len(row_data)
+        #row_l = len(row_data)
         type = 0
         last = None
         self.last = {}
         for x in (0,1,2,3,4):
-            y = 1
+            #y = 1
             val = self.Filter_test(row_data,x)
             if val <= last or last == None:
                 lt = self.temp
@@ -3682,7 +3681,7 @@ class RGBA_to_XBM(SaveImage_base):
             print 'test'
             y=0
             x=0
-            row_l = self.width * 4
+            #row_l = self.width * 4
             while y < self.height:
                 w=0
                 row = ''
@@ -3698,7 +3697,7 @@ class RGBA_to_XBM(SaveImage_base):
         else:
             y=0
             x=0
-            row_l = self.width * 4
+            #row_l = self.width * 4
             while y < self.height:
                 w=0
                 row = ''

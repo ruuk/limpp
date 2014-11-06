@@ -19,7 +19,7 @@ import zlib
 from os.path import getsize as ospath_getsize, splitext as ospath_splitext
 try:
     import imageop
-except:
+except ImportError:
     pass
 
 '''
@@ -333,7 +333,6 @@ class Manipulator:
             multiple-=1
 
     def Scale(self,width,height):
-        import imageop
         self.RGBA.data = array.array('L',imageop.scale(self.RGBA.data.tostring(),self.Bpp,self.width,self.height,width,height))
         self.RGBA.mode = 'PIXEL'
         self.RGBA.Update_dimensions(width,height)
@@ -342,7 +341,6 @@ class Manipulator:
         self.size_of_plane = self.width * self.height
         self.Bps = self.width * self.Bpp
         self.final_size = self.size_of_plane * self.Bpp
-        del imageop
 
     def Invert(self):
         self.RGBA.Channel_mode()
@@ -421,7 +419,6 @@ class Base_image:
                 out[pos] = temp[x]
             pos+=1
             x+=4
-        import imageop
         mono = imageop.dither2mono(out.tostring(),self.width,self.height)
         from gif_image import make_gif
         open(outfilename,'wb').write(make_gif(mono,self.width,self.height,fg,bg,trans))
